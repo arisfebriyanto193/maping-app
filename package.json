@@ -1,0 +1,35 @@
+{
+  "name": "drone-maping",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 5082",
+    "build": "next build",
+    "start": "next start -p 5082",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@turf/turf": "^7.2.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.475.0",
+    "mysql2": "^3.12.0",
+    "next": "^15.1.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.8",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.8",
+    "@types/leaflet": "^1.9.16",
+    "@types/node": "^20.17.19",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.0.8",
+    "typescript": "^5.7.3"
+  }
+}
