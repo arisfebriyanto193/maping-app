@@ -9,13 +9,14 @@ export interface OrbitGeneratorOptions {
   speed: number;
   photoCount?: number;
   drone: DroneProfile;
+  sensorMode?: '12mp' | '48mp';
 }
 
 export function generateOrbitPath(options: OrbitGeneratorOptions): {
   waypoints: Waypoint[];
   stats: MissionStats;
 } {
-  const { center, radiusM, altitude, speed, photoCount = 18, drone } = options;
+  const { center, radiusM, altitude, speed, photoCount = 18, drone, sensorMode = '48mp' } = options;
 
   if (!center || radiusM <= 0) {
     return {
@@ -41,7 +42,7 @@ export function generateOrbitPath(options: OrbitGeneratorOptions): {
   const pitchRad = Math.atan2(altitude, radiusM);
   const gimbalPitch = -Math.round((pitchRad * 180) / Math.PI);
 
-  const photoParams = calculatePhotogrammetry(drone, altitude, 75, 65);
+  const photoParams = calculatePhotogrammetry(drone, altitude, 75, 65, sensorMode);
 
   for (let i = 0; i <= photoCount; i++) {
     const angle = (i * stepAngle) % 360;

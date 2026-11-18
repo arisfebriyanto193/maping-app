@@ -1,5 +1,5 @@
 import * as turf from '@turf/turf';
-import { Waypoint, DroneProfile, MissionStats } from '@/types/drone';
+import { Waypoint, DroneProfile, MissionStats, WaypointPathType } from '@/types/drone';
 import { calculatePhotogrammetry } from './drone-presets';
 
 export interface GridGeneratorOptions {
@@ -12,6 +12,9 @@ export interface GridGeneratorOptions {
   doubleGrid: boolean; // 3D crosshatch
   gimbalPitch: number; // -90 nadir
   drone: DroneProfile;
+  sensorMode?: '12mp' | '48mp';
+  margin?: number; // meters (overshoot beyond polygon boundary)
+  waypointPathType?: WaypointPathType; // 'full' (all photo points) vs 'turnOnly' (corners only)
 }
 
 export function generateMappingGrid(options: GridGeneratorOptions): {
@@ -28,6 +31,9 @@ export function generateMappingGrid(options: GridGeneratorOptions): {
     doubleGrid,
     gimbalPitch,
     drone,
+    sensorMode = '48mp',
+    margin = 15,
+    waypointPathType = 'turnOnly',
   } = options;
 
   if (!polygonCoords || polygonCoords.length < 3) {
@@ -60,8 +66,28 @@ export function generateMappingGrid(options: GridGeneratorOptions): {
   const areaM2 = turf.area(poly);
   const areaHectares = Math.round((areaM2 / 10000) * 100) / 100;
 
+  // Apply margin / overshoot buffer if margin > 0
+  let sweepPoly = poly;
+  if (margin > 0) {
+    try {
+      const buffered = turf.buffer(poly, margin, { units: 'meters' });
+      if (buffered && buffered.geometry) {
+        // Turf buffer can return Feature<Polygon | MultiPolygon>
+        if (buffered.geometry.type === 'Polygon') {
+          sweepPoly = buffered as turf.Feature<turf.Polygon>;
+        } else if (buffered.geometry.type === 'MultiPolygon') {
+          // Take outer polygon
+          sweepPoly = turf.polygon(buffered.geometry.coordinates[0]);
+        }
+      }
+    } catch (e) {
+      console.warn('Buffer polygon failed, fallback to original poly', e);
+      sweepPoly = poly;
+    }
+  }
+
   // Calculate photogrammetry spacing
-  const photoParams = calculatePhotogrammetry(drone, altitude, overlapFront, overlapSide);
+  const photoParams = calculatePhotogrammetry(drone, altitude, overlapFront, overlapSide, sensorMode);
   const lineSpacingM = photoParams.lineSpacingM;
   const photoDistanceM = photoParams.photoDistanceM;
 
@@ -71,11 +97,18 @@ export function generateMappingGrid(options: GridGeneratorOptions): {
   const anglesToRun = doubleGrid ? [gridAngle, (gridAngle + 90) % 360] : [gridAngle];
 
   for (const angle of anglesToRun) {
-    const gridPassPoints = generatePassLines(poly, angle, lineSpacingM, photoDistanceM);
+    const gridPassPoints = generatePassLines(
+      sweepPoly,
+      angle,
+      lineSpacingM,
+      photoDistanceM,
+      waypointPathType,
+      margin
+    );
     allPoints = allPoints.concat(gridPassPoints);
   }
 
-  // Build Waypoints with heading, speed, altitude, and photo action
+  // Build Waypoints with heading, speed, altitude, and action
   const waypoints: Waypoint[] = [];
   let totalDistanceM = 0;
 
@@ -116,7 +149,9 @@ export function generateMappingGrid(options: GridGeneratorOptions): {
 
   totalDistanceM = Math.round(totalDistanceM);
   // Flight time: distance / speed + turning overhead (approx 2s per corner)
-  const flightTimeSeconds = Math.round(totalDistanceM / Math.max(1, speed) + (waypoints.length * 1.5));
+  const flightTimeSeconds = Math.round(
+    totalDistanceM / Math.max(1, speed) + waypoints.length * 1.5
+  );
   const maxFlightTimeSec = (drone.maxFlightTimeMin || 30) * 60;
   // Reserve 25% battery for safe RTH
   const usableFlightTimeSec = maxFlightTimeSec * 0.75;
@@ -126,6 +161,12 @@ export function generateMappingGrid(options: GridGeneratorOptions): {
     Math.round(100 - ((flightTimeSeconds % usableFlightTimeSec) / usableFlightTimeSec) * 75)
   );
 
+  // Even in turnOnly mode, calculate accurate estimated photos taken by timed shot
+  const estimatedPhotos = Math.max(
+    1,
+    Math.round(totalDistanceM / Math.max(1, photoDistanceM))
+  );
+
   return {
     waypoints,
     stats: {
@@ -133,7 +174,7 @@ export function generateMappingGrid(options: GridGeneratorOptions): {
       areaHectares,
       totalDistanceM,
       flightTimeSeconds,
-      photoCount: waypoints.length,
+      photoCount: estimatedPhotos,
       gsdCmPx: photoParams.gsdCmPx,
       batteriesRequired,
       batteryRemainingPercent,
@@ -145,7 +186,9 @@ function generatePassLines(
   poly: turf.Feature<turf.Polygon>,
   angleDeg: number,
   lineSpacingM: number,
-  photoDistanceM: number
+  photoDistanceM: number,
+  waypointPathType: WaypointPathType,
+  marginM: number
 ): { lng: number; lat: number }[] {
   const points: { lng: number; lat: number }[] = [];
 
@@ -162,11 +205,12 @@ function generatePassLines(
 
   const lineSpacingDeg = lineSpacingM * latDegPerMeter;
   const photoDistDeg = photoDistanceM * lngDegPerMeter;
+  const overshootDeg = Math.max(2, marginM * 0.5) * lngDegPerMeter; // Extra lead-in/lead-out margin at line ends
 
   const minY = bbox[1];
   const maxY = bbox[3];
-  const minX = bbox[0] - 0.001;
-  const maxX = bbox[2] + 0.001;
+  const minX = bbox[0] - 0.002;
+  const maxX = bbox[2] + 0.002;
 
   let currentY = minY + lineSpacingDeg / 2;
   let lineIndex = 0;
@@ -184,17 +228,25 @@ function generatePassLines(
         .map((f) => f.geometry.coordinates as [number, number])
         .sort((a, b) => a[0] - b[0]);
 
-      // Take outer pair or pairs inside polygon
-      const startX = sortedPts[0][0];
-      const endX = sortedPts[sortedPts.length - 1][0];
+      // Take outer pair and extend by overshoot margin
+      const startX = sortedPts[0][0] - overshootDeg;
+      const endX = sortedPts[sortedPts.length - 1][0] + overshootDeg;
 
       if (endX - startX > 0.00001) {
         const segPoints: [number, number][] = [];
-        const numPhotos = Math.max(1, Math.ceil((endX - startX) / photoDistDeg));
-        const actualStepX = (endX - startX) / numPhotos;
 
-        for (let s = 0; s <= numPhotos; s++) {
-          segPoints.push([startX + s * actualStepX, currentY]);
+        if (waypointPathType === 'turnOnly') {
+          // Turn Only Mode: Only record the 2 turning points (start and end of pass line)
+          segPoints.push([startX, currentY]);
+          segPoints.push([endX, currentY]);
+        } else {
+          // Full Mode: Record a waypoint for every photo distance interval
+          const numPhotos = Math.max(1, Math.ceil((endX - startX) / photoDistDeg));
+          const actualStepX = (endX - startX) / numPhotos;
+
+          for (let s = 0; s <= numPhotos; s++) {
+            segPoints.push([startX + s * actualStepX, currentY]);
+          }
         }
 
         // Boustrophedon serpentine alternate

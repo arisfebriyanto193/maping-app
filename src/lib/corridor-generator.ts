@@ -1,5 +1,5 @@
 import * as turf from '@turf/turf';
-import { Waypoint, DroneProfile, MissionStats } from '@/types/drone';
+import { Waypoint, DroneProfile, MissionStats, WaypointPathType } from '@/types/drone';
 import { calculatePhotogrammetry } from './drone-presets';
 
 export interface CorridorGeneratorOptions {
@@ -11,14 +11,28 @@ export interface CorridorGeneratorOptions {
   overlapSide: number;
   gimbalPitch: number;
   drone: DroneProfile;
+  sensorMode?: '12mp' | '48mp';
+  margin?: number;
+  waypointPathType?: WaypointPathType;
 }
 
 export function generateCorridorPath(options: CorridorGeneratorOptions): {
   waypoints: Waypoint[];
   stats: MissionStats;
 } {
-  const { pathCoords, corridorWidthM, altitude, speed, overlapFront, overlapSide, gimbalPitch, drone } =
-    options;
+  const {
+    pathCoords,
+    corridorWidthM,
+    altitude,
+    speed,
+    overlapFront,
+    overlapSide,
+    gimbalPitch,
+    drone,
+    sensorMode = '48mp',
+    margin = 15,
+    waypointPathType = 'turnOnly',
+  } = options;
 
   if (!pathCoords || pathCoords.length < 2) {
     return {
@@ -41,7 +55,7 @@ export function generateCorridorPath(options: CorridorGeneratorOptions): {
   const areaM2 = lineLengthM * corridorWidthM;
   const areaHectares = Math.round((areaM2 / 10000) * 100) / 100;
 
-  const photoParams = calculatePhotogrammetry(drone, altitude, overlapFront, overlapSide);
+  const photoParams = calculatePhotogrammetry(drone, altitude, overlapFront, overlapSide, sensorMode);
   const lineSpacingM = photoParams.lineSpacingM;
   const photoDistanceM = photoParams.photoDistanceM;
 
@@ -73,16 +87,29 @@ export function generateCorridorPath(options: CorridorGeneratorOptions): {
     }
 
     const len = turf.length(offsetLine, { units: 'meters' });
-    const count = Math.max(1, Math.ceil(len / photoDistanceM));
-    const stepDist = len / count;
-
     const linePts: { lng: number; lat: number }[] = [];
-    for (let i = 0; i <= count; i++) {
-      const pt = turf.along(offsetLine, (i * stepDist) / 1000, { units: 'kilometers' });
+
+    if (waypointPathType === 'turnOnly') {
+      const ptStart = turf.along(offsetLine, 0, { units: 'kilometers' });
+      const ptEnd = turf.along(offsetLine, len / 1000, { units: 'kilometers' });
       linePts.push({
-        lng: pt.geometry.coordinates[0],
-        lat: pt.geometry.coordinates[1],
+        lng: ptStart.geometry.coordinates[0],
+        lat: ptStart.geometry.coordinates[1],
       });
+      linePts.push({
+        lng: ptEnd.geometry.coordinates[0],
+        lat: ptEnd.geometry.coordinates[1],
+      });
+    } else {
+      const count = Math.max(1, Math.ceil(len / photoDistanceM));
+      const stepDist = len / count;
+      for (let i = 0; i <= count; i++) {
+        const pt = turf.along(offsetLine, (i * stepDist) / 1000, { units: 'kilometers' });
+        linePts.push({
+          lng: pt.geometry.coordinates[0],
+          lat: pt.geometry.coordinates[1],
+        });
+      }
     }
 
     if (pIndex % 2 === 1) {
@@ -137,6 +164,8 @@ export function generateCorridorPath(options: CorridorGeneratorOptions): {
     Math.round(100 - ((flightTimeSeconds % usableFlightTimeSec) / usableFlightTimeSec) * 75)
   );
 
+  const estimatedPhotos = Math.max(1, Math.round(totalDistanceM / Math.max(1, photoDistanceM)));
+
   return {
     waypoints,
     stats: {
@@ -144,7 +173,7 @@ export function generateCorridorPath(options: CorridorGeneratorOptions): {
       areaHectares,
       totalDistanceM,
       flightTimeSeconds,
-      photoCount: waypoints.length,
+      photoCount: estimatedPhotos,
       gsdCmPx: photoParams.gsdCmPx,
       batteriesRequired,
       batteryRemainingPercent,

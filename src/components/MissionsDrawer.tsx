@@ -48,7 +48,7 @@ export default function MissionsDrawer({
   }, [isOpen, user]);
 
   const handleDelete = async (id?: number) => {
-    if (!id || !confirm('Yakin ingin menghapus misi ini dari server?')) return;
+    if (!id || !confirm('Yakin ingin menghapus misi ini dari database server?')) return;
     try {
       const res = await fetch(`/maping/api/missions/${id}`, { method: 'DELETE' });
       const data = await res.json();
@@ -64,19 +64,19 @@ export default function MissionsDrawer({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex justify-end">
-      <div className="bg-slate-900 border-l border-slate-800 w-full max-w-md h-full flex flex-col p-5 shadow-2xl text-slate-200">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end">
+      <div className="bg-white border-l border-slate-200 w-full max-w-md h-full flex flex-col p-5 shadow-2xl text-slate-800">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2 font-bold text-white text-base">
-            <FolderOpen className="w-5 h-5 text-amber-400" />
-            <span>Daftar Misi di Server</span>
+        <div className="flex items-center justify-between pb-3.5 border-b border-slate-200">
+          <div className="flex items-center gap-2 font-black text-slate-900 text-base">
+            <FolderOpen className="w-5 h-5 text-amber-500" />
+            <span>Misi Tersimpan di Server</span>
           </div>
           <div className="flex items-center gap-2">
             {user && (
               <button
                 onClick={fetchMissions}
-                className="p-1.5 text-slate-400 hover:text-white transition"
+                className="p-1.5 text-slate-400 hover:text-slate-700 transition"
                 title="Refresh"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -84,7 +84,7 @@ export default function MissionsDrawer({
             )}
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white transition"
+              className="p-1.5 text-slate-400 hover:text-slate-700 transition"
             >
               <X className="w-5 h-5" />
             </button>
@@ -95,32 +95,32 @@ export default function MissionsDrawer({
         <div className="flex-1 overflow-y-auto py-4 space-y-3">
           {!user ? (
             <div className="text-center py-10 px-4">
-              <AlertCircle className="w-10 h-10 text-sky-400 mx-auto mb-3" />
-              <h4 className="text-sm font-semibold text-white mb-1">Perlu Login</h4>
-              <p className="text-xs text-slate-400 mb-4">
-                Silakan masuk dengan akun Anda untuk melihat dan memuat misi pemetaan yang tersimpan di database server.
+              <AlertCircle className="w-10 h-10 text-sky-600 mx-auto mb-3" />
+              <h4 className="text-sm font-bold text-slate-800 mb-1">Perlu Login</h4>
+              <p className="text-xs text-slate-500 mb-4">
+                Masuk dengan akun Anda untuk melihat dan memuat rencana misi pemetaan drone yang tersimpan.
               </p>
               <button
                 onClick={() => {
                   onClose();
                   onOpenAuthModal();
                 }}
-                className="bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs px-4 py-2 rounded-lg transition"
+                className="bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow-sm"
               >
                 Masuk Sekarang
               </button>
             </div>
           ) : loading ? (
-            <div className="text-center py-10 text-xs text-slate-400">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-sky-400" />
+            <div className="text-center py-10 text-xs text-slate-500 font-medium">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-sky-600" />
               Memuat daftar misi dari database...
             </div>
           ) : errorMsg ? (
-            <div className="bg-red-950/60 border border-red-800 text-red-300 text-xs p-3 rounded-lg">
+            <div className="bg-red-50 border border-red-200 text-red-800 text-xs p-3 rounded-xl">
               {errorMsg}
             </div>
           ) : missions.length === 0 ? (
-            <div className="text-center py-10 text-xs text-slate-400">
+            <div className="text-center py-10 text-xs text-slate-400 font-medium">
               Belum ada misi tersimpan. Buat jalur mapping baru dan klik tombol &quot;Simpan&quot;.
             </div>
           ) : (
@@ -134,18 +134,18 @@ export default function MissionsDrawer({
               return (
                 <div
                   key={m.id}
-                  className="bg-slate-800/80 border border-slate-700/70 rounded-xl p-3.5 hover:border-sky-500/60 transition group"
+                  className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 hover:border-sky-400 transition group shadow-2xs"
                 >
                   <div className="flex items-start justify-between mb-1.5">
-                    <h4 className="font-semibold text-white text-xs group-hover:text-sky-300">
+                    <h4 className="font-extrabold text-slate-900 text-xs group-hover:text-sky-700">
                       {m.title}
                     </h4>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-sky-500/20 text-sky-400">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-sky-100 text-sky-700">
                       {m.mission_type}
                     </span>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400 mb-3">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600 mb-3 font-medium">
                     <span className="flex items-center gap-1">
                       <Plane className="w-3 h-3 text-slate-400" /> {m.drone_model}
                     </span>
@@ -153,29 +153,29 @@ export default function MissionsDrawer({
                       <MapPin className="w-3 h-3 text-slate-400" /> {wpCount} WP ({m.altitude}m)
                     </span>
                     {m.created_at && (
-                      <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                      <span className="flex items-center gap-1 text-[10px] text-slate-400">
                         <Calendar className="w-2.5 h-2.5" />
                         {new Date(m.created_at).toLocaleDateString('id-ID')}
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-700/60">
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200">
                     <button
                       onClick={() => {
                         onLoadMission(m);
                         onClose();
                       }}
-                      className="bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs px-3 py-1 rounded-lg transition cursor-pointer"
+                      className="bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition cursor-pointer shadow-2xs"
                     >
                       Buka Misi
                     </button>
                     <button
                       onClick={() => handleDelete(m.id)}
-                      className="text-slate-400 hover:text-red-400 p-1 rounded transition cursor-pointer"
+                      className="text-slate-400 hover:text-red-600 p-1 rounded transition cursor-pointer"
                       title="Hapus"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>

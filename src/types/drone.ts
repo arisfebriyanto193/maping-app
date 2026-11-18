@@ -1,4 +1,9 @@
 export type MissionType = 'grid' | 'corridor' | 'waypoint' | 'orbit';
+export type WaypointPathType = 'full' | 'turnOnly';
+
+export type FinishAction = 'goHome' | 'autoHover' | 'goFirstWaypoint';
+export type RCLostAction = 'goContinue' | 'executeLostAction' | 'autoHover';
+export type CameraAction = 'takePhoto' | 'recordVideo' | 'none';
 
 export interface DroneProfile {
   id: string;
@@ -36,8 +41,8 @@ export interface MissionSettings {
   title: string;
   droneModel: string;
   missionType: MissionType;
-  altitude: number; // meters (e.g. 50-120m)
-  speed: number; // m/s (e.g. 5-15 m/s)
+  altitude: number; // meters (e.g. 15-200m)
+  speed: number; // m/s (e.g. 2-15 m/s)
   overlapFront: number; // % (e.g. 75%)
   overlapSide: number; // % (e.g. 65%)
   gridAngle: number; // 0-360 degrees
@@ -47,6 +52,15 @@ export interface MissionSettings {
   corridorWidth?: number; // meters for corridor
   orbitRadius?: number; // meters for orbit
   orbitCenter?: [number, number]; // [lat, lng] for orbit
+  
+  // AerialNav Safety & Behavior Parameters
+  finishAction: FinishAction;
+  rcLostAction: RCLostAction;
+  cameraAction: CameraAction;
+  takeoffSecurityHeight: number; // meters
+  sensorMode?: '12mp' | '48mp'; // 12MP binned vs 48MP/50MP high-res
+  turnMode?: 'turnOnly' | 'smooth'; // Turn Only (stop at point) vs Smooth Curvature
+  waypointPathType?: WaypointPathType; // 'full' (all photo points) vs 'turnOnly' (corners only)
 }
 
 export interface MissionStats {
@@ -85,4 +99,9 @@ export interface UserSession {
   username: string;
   email?: string;
   role: string;
+}
+
+export interface HistoryState {
+  boundaryCoords: [number, number][];
+  orbitCenter?: [number, number];
 }

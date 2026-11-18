@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import TopNavbar from '@/components/TopNavbar';
 import StatsHUD from '@/components/StatsHUD';
@@ -22,15 +22,16 @@ import {
   Waypoint,
   UserSession,
   DroneMissionRecord,
+  HistoryState,
 } from '@/types/drone';
 
 // Dynamically import Leaflet Map component with SSR disabled
 const MapViewport = dynamic(() => import('@/components/MapViewport'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
-      <div className="w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
-      <span className="text-xs">Memuat peta satelit Leaflet...</span>
+    <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center text-slate-500 gap-3">
+      <div className="w-9 h-9 border-3 border-sky-600 border-t-transparent rounded-full animate-spin" />
+      <span className="text-xs font-semibold text-slate-600">Memuat peta satelit Leaflet...</span>
     </div>
   ),
 });
@@ -57,13 +58,21 @@ export default function DroneMappingApp() {
     overlapSide: 65,
     gridAngle: 0,
     doubleGrid: false,
-    margin: 0,
+    margin: 15,
     gimbalPitch: -90,
     corridorWidth: 40,
     orbitRadius: 35,
+    // AerialNav Safety Settings
+    finishAction: 'goHome',
+    rcLostAction: 'goContinue',
+    cameraAction: 'takePhoto',
+    takeoffSecurityHeight: 20,
+    sensorMode: '48mp',
+    turnMode: 'smooth',
+    waypointPathType: 'turnOnly',
   });
 
-  // Map Data
+  // Map Data State
   const [boundaryCoords, setBoundaryCoords] = useState<[number, number][]>([]);
   const [orbitCenter, setOrbitCenter] = useState<[number, number] | undefined>(undefined);
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
@@ -77,6 +86,89 @@ export default function DroneMappingApp() {
     batteriesRequired: 0,
     batteryRemainingPercent: 100,
   });
+
+  // ==========================================
+  // UNDO & REDO HISTORY STACK SYSTEM
+  // ==========================================
+  const [history, setHistory] = useState<HistoryState[]>([
+    { boundaryCoords: [], orbitCenter: undefined },
+  ]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+
+  const pushHistory = useCallback((newCoords: [number, number][], newOrbitCenter?: [number, number]) => {
+    setHistory((prev) => {
+      const trimmed = prev.slice(0, historyIndex + 1);
+      return [...trimmed, { boundaryCoords: newCoords, orbitCenter: newOrbitCenter }];
+    });
+    setHistoryIndex((prev) => prev + 1);
+  }, [historyIndex]);
+
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
+
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      const nextIdx = historyIndex - 1;
+      const targetState = history[nextIdx];
+      setHistoryIndex(nextIdx);
+      setBoundaryCoords(targetState.boundaryCoords);
+      setOrbitCenter(targetState.orbitCenter);
+    }
+  }, [historyIndex, history]);
+
+  const handleRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const nextIdx = historyIndex + 1;
+      const targetState = history[nextIdx];
+      setHistoryIndex(nextIdx);
+      setBoundaryCoords(targetState.boundaryCoords);
+      setOrbitCenter(targetState.orbitCenter);
+    }
+  }, [historyIndex, history]);
+
+  // Point Addition & Deletion Actions
+  const handleAddPoint = useCallback((pt: [number, number]) => {
+    setBoundaryCoords((prev) => {
+      const updated = [...prev, pt];
+      pushHistory(updated, orbitCenter);
+      return updated;
+    });
+  }, [orbitCenter, pushHistory]);
+
+  const handleUpdateBoundaryCoords = useCallback((coords: [number, number][]) => {
+    setBoundaryCoords(coords);
+    pushHistory(coords, orbitCenter);
+  }, [orbitCenter, pushHistory]);
+
+  const handleDeletePointIndex = useCallback((index: number) => {
+    setBoundaryCoords((prev) => {
+      const updated = prev.filter((_, i) => i !== index);
+      pushHistory(updated, orbitCenter);
+      return updated;
+    });
+  }, [orbitCenter, pushHistory]);
+
+  const handleUpdateOrbitCenter = useCallback((center: [number, number]) => {
+    setOrbitCenter(center);
+    pushHistory(boundaryCoords, center);
+  }, [boundaryCoords, pushHistory]);
+
+  const handleClearBoundary = useCallback(() => {
+    setBoundaryCoords([]);
+    setOrbitCenter(undefined);
+    pushHistory([], undefined);
+    setWaypoints([]);
+    setStats({
+      areaM2: 0,
+      areaHectares: 0,
+      totalDistanceM: 0,
+      flightTimeSeconds: 0,
+      photoCount: 0,
+      gsdCmPx: 0,
+      batteriesRequired: 0,
+      batteryRemainingPercent: 100,
+    });
+  }, [pushHistory]);
 
   // Modals
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -126,22 +218,6 @@ export default function DroneMappingApp() {
     setSettings((prev) => ({ ...prev, ...partial }));
   };
 
-  const handleClearBoundary = () => {
-    setBoundaryCoords([]);
-    setOrbitCenter(undefined);
-    setWaypoints([]);
-    setStats({
-      areaM2: 0,
-      areaHectares: 0,
-      totalDistanceM: 0,
-      flightTimeSeconds: 0,
-      photoCount: 0,
-      gsdCmPx: 0,
-      batteriesRequired: 0,
-      batteryRemainingPercent: 100,
-    });
-  };
-
   // Re-calculate flight path when inputs change
   useEffect(() => {
     if (missionType === 'grid') {
@@ -156,6 +232,9 @@ export default function DroneMappingApp() {
           doubleGrid: settings.doubleGrid,
           gimbalPitch: settings.gimbalPitch,
           drone: activeDrone,
+          sensorMode: settings.sensorMode,
+          margin: settings.margin,
+          waypointPathType: settings.waypointPathType,
         });
         setWaypoints(result.waypoints);
         setStats(result.stats);
@@ -173,6 +252,9 @@ export default function DroneMappingApp() {
           overlapSide: settings.overlapSide,
           gimbalPitch: settings.gimbalPitch,
           drone: activeDrone,
+          sensorMode: settings.sensorMode,
+          margin: settings.margin,
+          waypointPathType: settings.waypointPathType,
         });
         setWaypoints(result.waypoints);
         setStats(result.stats);
@@ -188,6 +270,7 @@ export default function DroneMappingApp() {
           speed: settings.speed,
           photoCount: 18,
           drone: activeDrone,
+          sensorMode: settings.sensorMode,
         });
         setWaypoints(result.waypoints);
         setStats(result.stats);
@@ -220,6 +303,9 @@ export default function DroneMappingApp() {
     settings.gimbalPitch,
     settings.corridorWidth,
     settings.orbitRadius,
+    settings.sensorMode,
+    settings.margin,
+    settings.waypointPathType,
     activeDrone,
   ]);
 
@@ -250,6 +336,7 @@ export default function DroneMappingApp() {
             ? JSON.parse(mission.boundary_geojson)
             : mission.boundary_geojson;
         setBoundaryCoords(coords);
+        pushHistory(coords, undefined);
       }
 
       const wps =
@@ -272,8 +359,8 @@ export default function DroneMappingApp() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950">
-      {/* Top Navigation */}
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-50 text-slate-900">
+      {/* Top Navigation (Light Theme with Undo / Redo buttons) */}
       <TopNavbar
         selectedDroneId={selectedDroneId}
         onSelectDrone={handleSelectDrone}
@@ -285,16 +372,20 @@ export default function DroneMappingApp() {
         user={user}
         onOpenAuthModal={() => setShowAuthModal(true)}
         onLogout={handleLogout}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
       />
 
       {/* Main App Workspace */}
       <div className="flex-1 relative flex overflow-hidden">
-        {/* Desktop Sidebar Controls */}
-        <aside className="hidden lg:flex flex-col w-84 bg-slate-900/90 backdrop-blur-md border-r border-slate-800 p-4 overflow-y-auto shrink-0 z-20 shadow-2xl">
+        {/* Desktop Sidebar Controls (Light Theme) */}
+        <aside className="hidden lg:flex flex-col w-84 bg-white/95 backdrop-blur-md border-r border-slate-200 p-4 overflow-y-auto shrink-0 z-20 shadow-md">
           <div className="mb-4">
-            <h2 className="text-sm font-bold text-white mb-0.5">Parameter Misi Terbang</h2>
-            <p className="text-[11px] text-slate-400">
-              Konfigurasi fotogrametri otomatis &amp; sudut kamera.
+            <h2 className="text-sm font-extrabold text-slate-900 mb-0.5">Parameter Misi Terbang</h2>
+            <p className="text-[11px] text-slate-500 font-medium">
+              Konfigurasi fotogrametri otomatis &amp; keselamatan terbang.
             </p>
           </div>
 
@@ -308,7 +399,7 @@ export default function DroneMappingApp() {
 
         {/* Center Map Viewport */}
         <main className="flex-1 relative h-full w-full">
-          {/* Floating Stats HUD Banner */}
+          {/* Floating Stats HUD Banner (Light Theme) */}
           <div className="absolute top-16 left-3 right-3 sm:left-4 sm:right-4 z-20 pointer-events-none">
             <div className="pointer-events-auto max-w-4xl mx-auto">
               <StatsHUD
@@ -320,15 +411,21 @@ export default function DroneMappingApp() {
             </div>
           </div>
 
-          {/* Interactive Leaflet Map */}
+          {/* Interactive Leaflet Map with Undo & Redo tools */}
           <MapViewport
             missionType={missionType}
             boundaryCoords={boundaryCoords}
-            onUpdateBoundaryCoords={setBoundaryCoords}
+            onAddPoint={handleAddPoint}
+            onUpdateBoundaryCoords={handleUpdateBoundaryCoords}
+            onDeletePointIndex={handleDeletePointIndex}
             waypoints={waypoints}
             orbitCenter={orbitCenter}
-            onUpdateOrbitCenter={setOrbitCenter}
+            onUpdateOrbitCenter={handleUpdateOrbitCenter}
             orbitRadius={settings.orbitRadius}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
           />
         </main>
       </div>

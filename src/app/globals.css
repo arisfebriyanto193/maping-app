@@ -9,8 +9,8 @@
     touch-action: pan-x pan-y;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
-    background-color: #0f172a;
-    color: #f8fafc;
+    background-color: #f8fafc;
+    color: #0f172a;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   }
 }
@@ -20,37 +20,40 @@
   width: 100%;
   height: 100%;
   z-index: 10;
-  background-color: #090d16 !important;
+  background-color: #cbd5e1 !important;
 }
 
-/* Custom Waypoint Marker Pin */
+/* Custom Waypoint Marker Pin (High Outdoor Visibility) */
 .custom-wp-pin {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 26px;
   height: 26px;
-  background: #3b82f6;
-  border: 2px solid #ffffff;
+  background: #2563eb;
+  border: 2.5px solid #ffffff;
   border-radius: 50%;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
   color: #ffffff;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
-  transition: transform 0.15s ease;
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .custom-wp-pin:hover {
-  transform: scale(1.2);
+  transform: scale(1.25);
+  z-index: 1000 !important;
 }
 
 .custom-wp-pin.start {
-  background: #10b981;
+  background: #16a34a;
+  box-shadow: 0 0 10px rgba(22, 163, 74, 0.6), 0 3px 8px rgba(0, 0, 0, 0.3);
 }
 
 .custom-wp-pin.end {
-  background: #ef4444;
+  background: #dc2626;
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.6), 0 3px 8px rgba(0, 0, 0, 0.3);
 }
 
 .custom-poi-pin {
@@ -62,25 +65,41 @@
   background: #f59e0b;
   border: 3px solid #ffffff;
   border-radius: 50%;
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.8);
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.9), 0 3px 8px rgba(0, 0, 0, 0.3);
   color: #ffffff;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: bold;
 }
 
-/* Leaflet control overrides for mobile */
+/* Leaflet control overrides */
 .leaflet-top, .leaflet-bottom {
   z-index: 20 !important;
 }
 
-/* Scrollbar polish */
+.leaflet-popup-content-wrapper {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+.leaflet-popup-tip {
+  background: #ffffff !important;
+}
+
+/* Light Theme Scrollbars */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: #f1f5f9;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.6);
+  background: #cbd5e1;
   border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }

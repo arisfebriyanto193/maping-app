@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'DJI & Drone Waypoint Mission Planner',
-  description: 'Aplikasi web pembuatan jalur mapping drone DJI Mini 4 Pro, Mavic, Air, Litchi / Lito x1 dengan Google Satelit, kalkulator GSD, dan ekspor KMZ/CSV.',
+  title: 'Aerial Mission Planner - DJI & Drone Waypoint Mapping',
+  description: 'Aplikasi web pembuatan jalur mapping drone DJI Mini 4 Pro, Mini 5 Pro, Air 3, Mavic 3, Lito X1 dengan peta satelit gratis, undo titik, dan ekspor KMZ/CSV.',
 };
 
 export const viewport: Viewport = {
@@ -11,12 +11,14 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#0f172a',
+  themeColor: '#ffffff',
 };
 
 export default function RootLayout({
   children,
-}: ReadencodedRootLayoutProps<{ children: React.ReactNode }>) {
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="id">
       <head>
@@ -27,11 +29,9 @@ export default function RootLayout({
           crossOrigin=""
         />
       </head>
-      <body className="antialiased bg-slate-950 text-slate-100 min-h-screen overflow-hidden flex flex-col">
+      <body className="antialiased bg-slate-50 text-slate-900 min-h-screen overflow-hidden flex flex-col">
         {children}
       </body>
     </html>
   );
 }
-
-type ReadencodedRootLayoutProps<T> = T;
