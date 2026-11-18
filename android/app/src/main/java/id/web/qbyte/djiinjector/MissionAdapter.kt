@@ -9,7 +9,8 @@ import com.google.android.material.button.MaterialButton
 
 class MissionAdapter(
     private var missions: List<MissionItem>,
-    private val onInjectClick: (MissionItem) -> Unit
+    private val onInjectClick: (MissionItem) -> Unit,
+    private val onSaveKmzClick: (MissionItem) -> Unit
 ) : RecyclerView.Adapter<MissionAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -20,6 +21,7 @@ class MissionAdapter(
         val tvSpeed: TextView = view.findViewById(R.id.tvSpeed)
         val tvWaypoints: TextView = view.findViewById(R.id.tvWaypointCount)
         val btnInject: MaterialButton = view.findViewById(R.id.btnInject)
+        val btnSaveDownloads: MaterialButton = view.findViewById(R.id.btnSaveDownloads)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -38,6 +40,9 @@ class MissionAdapter(
 
         holder.btnInject.setOnClickListener {
             onInjectClick(item)
+        }
+        holder.btnSaveDownloads.setOnClickListener {
+            onSaveKmzClick(item)
         }
     }
 
