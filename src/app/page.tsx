@@ -10,6 +10,7 @@ import ExportModal from '@/components/ExportModal';
 import SaveMissionModal from '@/components/SaveMissionModal';
 import MissionsDrawer from '@/components/MissionsDrawer';
 import AuthModal from '@/components/AuthModal';
+import { X, Edit3 } from 'lucide-react';
 
 import { DRONE_PRESETS } from '@/lib/drone-presets';
 import { generateMappingGrid } from '@/lib/grid-generator';
@@ -170,11 +171,12 @@ export default function DroneMappingApp() {
     });
   }, [pushHistory]);
 
-  // Modals
+  // Modals & Active Edit State
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showMissionsDrawer, setShowMissionsDrawer] = useState(false);
+  const [editingMission, setEditingMission] = useState<DroneMissionRecord | null>(null);
 
   // Check user session on load
   const checkSession = useCallback(async () => {
@@ -312,6 +314,7 @@ export default function DroneMappingApp() {
   // Load a mission saved on server
   const handleLoadMission = (mission: DroneMissionRecord) => {
     try {
+      setEditingMission(mission);
       setSettings((prev) => ({
         ...prev,
         title: mission.title,
@@ -401,7 +404,35 @@ export default function DroneMappingApp() {
         <main className="flex-1 relative h-full w-full">
           {/* Floating Stats HUD Banner (Light Theme) */}
           <div className="absolute top-16 left-3 right-3 sm:left-4 sm:right-4 z-20 pointer-events-none">
-            <div className="pointer-events-auto max-w-4xl mx-auto">
+            <div className="pointer-events-auto max-w-4xl mx-auto space-y-2">
+              {/* Active Editing Mission Banner */}
+              {editingMission && (
+                <div className="bg-amber-500 text-white shadow-md border border-amber-400 px-3.5 py-1.5 rounded-2xl flex items-center justify-between text-xs transition">
+                  <div className="flex items-center gap-2 min-w-0 pr-2">
+                    <span className="w-2 h-2 rounded-full bg-white animate-pulse shrink-0" />
+                    <span className="font-bold text-amber-100 uppercase text-[10px] tracking-wider shrink-0">
+                      Sedang Mengedit:
+                    </span>
+                    <span className="font-extrabold truncate text-white">{editingMission.title}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setShowSaveModal(true)}
+                      className="bg-white text-amber-800 hover:bg-amber-50 font-bold text-[10px] px-2.5 py-1 rounded-xl transition shadow-2xs cursor-pointer"
+                    >
+                      Simpan Perubahan
+                    </button>
+                    <button
+                      onClick={() => setEditingMission(null)}
+                      className="text-amber-100 hover:text-white p-0.5 rounded-lg transition cursor-pointer"
+                      title="Keluar dari mode edit (jadikan proyek baru)"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <StatsHUD
                 stats={stats}
                 altitude={settings.altitude}
@@ -456,6 +487,8 @@ export default function DroneMappingApp() {
         boundaryCoords={boundaryCoords}
         settings={settings}
         stats={stats}
+        editingMission={editingMission}
+        onResetEditingMission={() => setEditingMission(null)}
       />
 
       <ExportModal

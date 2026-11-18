@@ -14,6 +14,7 @@ import {
   Copy,
   ChevronRight,
   Sparkles,
+  Usb,
 } from 'lucide-react';
 import { Waypoint, DroneProfile, MissionSettings } from '@/types/drone';
 import { generateDJIWPMLKMZ } from '@/lib/dji-wpml';
@@ -40,7 +41,7 @@ export default function ExportModal({
   boundaryCoords,
 }: ExportModalProps) {
   const [downloading, setDownloading] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'formats' | 'guide'>('formats');
+  const [activeTab, setActiveTab] = useState<'formats' | 'usb' | 'guide'>('formats');
   const [deviceTab, setDeviceTab] = useState<'android' | 'ios' | 'rc1'>('android');
   const [copiedPath, setCopiedPath] = useState(false);
 
@@ -193,10 +194,10 @@ export default function ExportModal({
             Ekspor & Panduan Terbang DJI Fly
           </h3>
 
-          <div className="flex border-b border-slate-200 gap-2">
+          <div className="flex border-b border-slate-200 gap-2 overflow-x-auto">
             <button
               onClick={() => setActiveTab('formats')}
-              className={`pb-2 px-3 text-xs font-bold transition border-b-2 -mb-px cursor-pointer flex items-center gap-1.5 ${
+              className={`pb-2 px-3 text-xs font-bold transition border-b-2 -mb-px cursor-pointer flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'formats'
                   ? 'border-sky-600 text-sky-700'
                   : 'border-transparent text-slate-400 hover:text-slate-700'
@@ -205,8 +206,21 @@ export default function ExportModal({
               <Download className="w-3.5 h-3.5" /> Pilihan Format File
             </button>
             <button
+              onClick={() => setActiveTab('usb')}
+              className={`pb-2 px-3 text-xs font-bold transition border-b-2 -mb-px cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'usb'
+                  ? 'border-sky-600 text-sky-700'
+                  : 'border-transparent text-slate-400 hover:text-slate-700'
+              }`}
+            >
+              <Usb className="w-3.5 h-3.5 text-emerald-600" /> Kabel USB Laptop (MTP)
+              <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded-full font-extrabold">
+                Praktis
+              </span>
+            </button>
+            <button
               onClick={() => setActiveTab('guide')}
-              className={`pb-2 px-3 text-xs font-bold transition border-b-2 -mb-px cursor-pointer flex items-center gap-1.5 ${
+              className={`pb-2 px-3 text-xs font-bold transition border-b-2 -mb-px cursor-pointer flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'guide'
                   ? 'border-sky-600 text-sky-700'
                   : 'border-transparent text-slate-400 hover:text-slate-700'
@@ -371,7 +385,146 @@ export default function ExportModal({
           </div>
         )}
 
-        {/* Tab 2: Step-by-Step Tutorial (From Video Muhammad Ardans) */}
+        {/* Tab 2: USB Cable Direct to Laptop (MTP Mode) */}
+        {activeTab === 'usb' && (
+          <div className="overflow-y-auto space-y-3 pr-1 flex-1 text-xs text-slate-700">
+            {/* Highlight Banner */}
+            <div className="bg-gradient-to-r from-emerald-500/10 via-sky-500/10 to-transparent border border-emerald-300 rounded-2xl p-3.5">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Usb className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-slate-900 text-xs">
+                    Import Cepat via Kabel USB Laptop (Mode MTP)
+                  </h4>
+                  <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                    Saat HP atau Remote DJI (DJI RC 2) disambungkan ke laptop via kabel USB, 
+                    <strong> Google sama sekali tidak mengunci folder Android/data</strong>. Anda dapat langsung menimpa misi dummy dengan 4 langkah mudah:
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions Card: Download KMZ & Copy Path */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Download KMZ */}
+              <button
+                onClick={handleExportKMZ}
+                disabled={downloading === 'kmz'}
+                className="flex items-center justify-between p-3 rounded-2xl bg-sky-50 hover:bg-sky-100/70 border border-sky-200 transition cursor-pointer text-left shadow-2xs group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-sky-600 text-white flex items-center justify-center font-black text-[11px]">
+                    KMZ
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900 text-xs group-hover:text-sky-700">
+                      1. Unduh File KMZ
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      Format resmi WPML DJI Fly
+                    </div>
+                  </div>
+                </div>
+                <Download className="w-4 h-4 text-sky-600 group-hover:translate-y-0.5 transition" />
+              </button>
+
+              {/* Copy Path */}
+              <button
+                onClick={handleCopyPath}
+                className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 hover:bg-slate-100/70 border border-slate-200 transition cursor-pointer text-left shadow-2xs group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-slate-700 text-white flex items-center justify-center">
+                    <Copy className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900 text-xs group-hover:text-slate-800">
+                      2. Salin Path Folder
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono truncate max-w-[150px]">
+                      Android/data/dji.go.v5...
+                    </div>
+                  </div>
+                </div>
+                {copiedPath ? (
+                  <Check className="w-4 h-4 text-emerald-600" />
+                ) : (
+                  <Copy className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+                )}
+              </button>
+            </div>
+
+            {/* Step by Step Guide */}
+            <div className="space-y-2 pt-1">
+              <div className="flex gap-2.5 items-start bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-extrabold flex items-center justify-center shrink-0 text-[11px]">
+                  1
+                </span>
+                <div>
+                  <h5 className="font-bold text-slate-900">Buat 1 Misi Dummy di DJI Fly</h5>
+                  <p className="text-slate-500 mt-0.5 text-[11px]">
+                    Buka DJI Fly pada HP/Remote, masuk ke menu <strong>Waypoint Flight</strong>, buat 2 titik sembarang lalu klik <strong>Simpan</strong> untuk memancing folder dummy.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 items-start bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-extrabold flex items-center justify-center shrink-0 text-[11px]">
+                  2
+                </span>
+                <div>
+                  <h5 className="font-bold text-slate-900">Colokkan Kabel USB ke Laptop</h5>
+                  <p className="text-slate-500 mt-0.5 text-[11px]">
+                    Sambungkan HP / Remote DJI ke laptop dengan kabel USB-C. Pada layar HP/Remote, pilih mode <strong>&quot;Transfer File / MTP&quot;</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 items-start bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-extrabold flex items-center justify-center shrink-0 text-[11px]">
+                  3
+                </span>
+                <div>
+                  <h5 className="font-bold text-slate-900">Buka Folder Misi di Windows Explorer / Finder</h5>
+                  <p className="text-slate-500 mt-0.5 text-[11px]">
+                    Buka File Explorer di laptop, masuk ke perangkat HP Anda lalu tuju alamat:
+                  </p>
+                  <div className="bg-white border border-slate-200 rounded-lg p-1.5 font-mono text-[10px] text-slate-800 mt-1 select-all break-all">
+                    [Nama HP Anda] &gt; Internal Storage &gt; Android &gt; data &gt; dji.go.v5 &gt; files &gt; waypoint
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 items-start bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-extrabold flex items-center justify-center shrink-0 text-[11px]">
+                  4
+                </span>
+                <div>
+                  <h5 className="font-bold text-slate-900">Seret & Timpa File Dummy</h5>
+                  <p className="text-slate-500 mt-0.5 text-[11px]">
+                    Buka subfolder misi dummy terbaru (nama folder berupa UUID seperti <code>45B1A832-...</code>). Seret (drag & drop) file KMZ yang diunduh dari tombol di atas, lalu samakan namanya atau timpa (replace) file <code>.kmz</code> dummy di dalamnya.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 items-start bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
+                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-extrabold flex items-center justify-center shrink-0 text-[11px]">
+                  5
+                </span>
+                <div>
+                  <h5 className="font-bold text-emerald-950">Buka DJI Fly & Terbang! 🚀</h5>
+                  <p className="text-emerald-800 mt-0.5 text-[11px]">
+                    Buka kembali aplikasi DJI Fly pada remote/HP Anda. Buka menu Waypoint, misi dummy Anda otomatis sudah berubah menjadi jalur pemetaan lengkap yang Anda buat di web!
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Step-by-Step Tutorial (From Video Muhammad Ardans) */}
         {activeTab === 'guide' && (
           <div className="overflow-y-auto space-y-3 pr-1 flex-1 text-xs text-slate-700">
             {/* Device Switcher */}

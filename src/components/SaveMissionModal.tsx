@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, Save, Database, Download, AlertCircle, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Save, Database, Download, AlertCircle, Check, RefreshCw, PlusCircle } from 'lucide-react';
 import { UserSession, DroneMissionRecord, Waypoint, MissionSettings, MissionStats } from '@/types/drone';
 
 interface SaveMissionModalProps {
@@ -13,6 +13,8 @@ interface SaveMissionModalProps {
   boundaryCoords: [number, number][];
   settings: MissionSettings;
   stats: MissionStats;
+  editingMission?: DroneMissionRecord | null;
+  onResetEditingMission?: () => void;
   onSavedSuccess?: () => void;
 }
 
@@ -25,6 +27,8 @@ export default function SaveMissionModal({
   boundaryCoords,
   settings,
   stats,
+  editingMission,
+  onResetEditingMission,
   onSavedSuccess,
 }: SaveMissionModalProps) {
   const [title, setTitle] = useState(settings.title || 'Misi Pemetaan Drone');
@@ -33,10 +37,24 @@ export default function SaveMissionModal({
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Sync state whenever modal opens or active editing mission changes
+  useEffect(() => {
+    if (isOpen) {
+      if (editingMission) {
+        setTitle(editingMission.title);
+        setDescription(editingMission.description || '');
+      } else {
+        setTitle(settings.title || 'Misi Pemetaan Drone');
+        setDescription('');
+      }
+      setErrorMsg('');
+      setSuccessMsg('');
+    }
+  }, [isOpen, editingMission, settings.title]);
+
   if (!isOpen) return null;
 
-  const handleSaveToServer = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveToServer = async (mode: 'update' | 'new') => {
     if (!user) {
       onOpenAuthModal();
       return;
@@ -68,18 +86,28 @@ export default function SaveMissionModal({
         stats_json: stats,
       };
 
-      const res = await fetch('/maping/api/missions', {
-        method: 'POST',
+      const isUpdate = mode === 'update' && editingMission?.id;
+      const url = isUpdate
+        ? `/maping/api/missions/${editingMission.id}`
+        : '/maping/api/missions';
+      const method = isUpdate ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Gagal menyimpan ke server');
+        throw new Error(data.message || (isUpdate ? 'Gagal memperbarui misi di server' : 'Gagal menyimpan ke server'));
       }
 
-      setSuccessMsg('Misi berhasil disimpan ke database server!');
+      setSuccessMsg(
+        isUpdate
+          ? `Misi "${payload.title}" berhasil diperbarui di server!`
+          : `Misi baru "${payload.title}" berhasil disimpan ke database!`
+      );
       if (onSavedSuccess) onSavedSuccess();
       setTimeout(() => {
         onClose();
@@ -125,11 +153,40 @@ export default function SaveMissionModal({
 
         <h3 className="text-base font-extrabold text-slate-900 mb-1 flex items-center gap-2">
           <Save className="w-5 h-5 text-emerald-600" />
-          Simpan Rencana Misi
+          {editingMission ? 'Perbarui / Simpan Misi' : 'Simpan Rencana Misi'}
         </h3>
-        <p className="text-xs text-slate-500 mb-4">
-          Simpan jalur mapping ke server database agar dapat dibuka kembali kapan saja dari HP atau PC.
+        <p className="text-xs text-slate-500 mb-3">
+          {editingMission
+            ? 'Anda sedang mengedit misi yang sudah ada. Anda dapat memperbarui proyek ini atau menyimpannya sebagai salinan baru.'
+            : 'Simpan jalur mapping ke server database agar dapat dibuka kembali kapan saja dari HP atau PC.'}
         </p>
+
+        {/* Editing Banner */}
+        {editingMission && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-2.5 mb-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0 pr-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+              <div className="min-w-0">
+                <span className="text-[10px] font-black uppercase text-amber-800 block">
+                  Mode Edit Misi Aktif:
+                </span>
+                <span className="text-xs font-bold text-slate-900 truncate block">
+                  {editingMission.title}
+                </span>
+              </div>
+            </div>
+            {onResetEditingMission && (
+              <button
+                type="button"
+                onClick={onResetEditingMission}
+                className="text-[10px] font-bold text-slate-600 hover:text-red-600 bg-white border border-slate-200 px-2 py-1 rounded-lg shrink-0 transition shadow-2xs"
+                title="Batal mode edit agar tersimpan sebagai misi baru murni"
+              >
+                Buat Misi Baru
+              </button>
+            )}
+          </div>
+        )}
 
         {successMsg && (
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs p-3 rounded-2xl mb-4 flex items-center gap-2 font-medium">
@@ -145,7 +202,7 @@ export default function SaveMissionModal({
           </div>
         )}
 
-        <form onSubmit={handleSaveToServer} className="space-y-3.5">
+        <div className="space-y-3.5">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Judul Misi</label>
             <input
@@ -191,14 +248,41 @@ export default function SaveMissionModal({
           </div>
 
           {user ? (
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-md cursor-pointer flex items-center justify-center gap-1.5"
-            >
-              <Database className="w-4 h-4" />
-              <span>{saving ? 'Menyimpan...' : 'Simpan ke Database Server'}</span>
-            </button>
+            editingMission ? (
+              <div className="space-y-2 pt-1">
+                {/* Update Existing Mission Button */}
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => handleSaveToServer('update')}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <RefreshCw className={`w-4 h-4 ${saving ? 'animate-spin' : ''}`} />
+                  <span>{saving ? 'Memperbarui...' : 'Perbarui Misi Ini (Timpa Proyek)'}</span>
+                </button>
+
+                {/* Save As New Mission Button */}
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => handleSaveToServer('new')}
+                  className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>{saving ? 'Menyimpan...' : 'Simpan Sebagai Misi Baru (Duplikat)'}</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleSaveToServer('new')}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Database className="w-4 h-4" />
+                <span>{saving ? 'Menyimpan...' : 'Simpan ke Database Server'}</span>
+              </button>
+            )
           ) : (
             <div className="space-y-2">
               <button
@@ -231,7 +315,7 @@ export default function SaveMissionModal({
               Batal
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
