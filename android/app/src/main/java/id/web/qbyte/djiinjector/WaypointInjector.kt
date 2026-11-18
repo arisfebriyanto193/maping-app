@@ -42,9 +42,18 @@ object WaypointInjector {
      */
     fun injectMissionDirect(targetDir: File, kmzBytes: ByteArray): InjectResult {
         try {
-            val kmzFiles = targetDir.listFiles { f ->
+            // Find KMZ directly or inside subfolders (DJI Fly saves as waypoint/<UUID>/<UUID>.kmz)
+            val directKmz = targetDir.listFiles { f ->
                 f.isFile && f.name.lowercase().endsWith(".kmz")
-            } ?: emptyArray()
+            }?.toList() ?: emptyList()
+
+            val subfolderKmz = targetDir.listFiles { f -> f.isDirectory }?.flatMap { sub ->
+                sub.listFiles { f ->
+                    f.isFile && f.name.lowercase().endsWith(".kmz")
+                }?.toList() ?: emptyList()
+            } ?: emptyList()
+
+            val kmzFiles = directKmz + subfolderKmz
 
             if (kmzFiles.isEmpty()) {
                 return InjectResult(
@@ -92,9 +101,14 @@ object WaypointInjector {
                 if (wpFolder != null) targetFolder = wpFolder
             }
 
-            val kmzFiles = targetFolder.listFiles().filter {
+            // Find KMZ directly or inside subfolders (DJI Fly saves as waypoint/<UUID>/<UUID>.kmz)
+            val directKmz = targetFolder.listFiles().filter {
                 it.isFile && (it.name?.lowercase()?.endsWith(".kmz") == true)
             }
+            val subfolderKmz = targetFolder.listFiles().filter { it.isDirectory }.flatMap { sub ->
+                sub.listFiles().filter { it.isFile && (it.name?.lowercase()?.endsWith(".kmz") == true) }
+            }
+            val kmzFiles = directKmz + subfolderKmz
 
             if (kmzFiles.isEmpty()) {
                 return InjectResult(

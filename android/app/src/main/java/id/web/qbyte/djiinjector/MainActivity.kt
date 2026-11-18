@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -81,7 +82,7 @@ class MainActivity : AppCompatActivity() {
             if (directFolder != null) {
                 Toast.makeText(this, "Folder DJI Fly terdeteksi langsung tanpa perlu SAF!", Toast.LENGTH_SHORT).show()
             } else {
-                launchFolderPickerWithDeepLink()
+                showFolderPickerPrompt()
             }
         }
 
@@ -113,21 +114,45 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showFolderPickerPrompt() {
+        AlertDialog.Builder(this)
+            .setTitle("Buka Folder DJI Fly")
+            .setMessage("Aplikasi akan membuka folder waypoint DJI Fly secara langsung.\n\n" +
+                    "⚠️ Tips Android 11 - 14:\n" +
+                    "Jika sistem HP Anda mengarahkan ke folder luar (karena batasan Google):\n" +
+                    "1. Klik 'Gunakan Folder Ini' jika berada di folder dji.go.v5 / waypoint.\n" +
+                    "2. Atau gunakan tombol 'Simpan KMZ' untuk mengunduh lalu memindahkannya via ZArchiver / Kabel USB.")
+            .setPositiveButton("Buka Folder") { _, _ ->
+                launchFolderPickerWithDeepLink()
+            }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
     /**
-     * Auto Deep-Link into Android/data/dji.go.v5/files/waypoint
-     * Bypasses the need for manual navigation through hidden Android/data.
+     * Auto Deep-Link using proper Tree Document URIs
      */
     private fun launchFolderPickerWithDeepLink() {
-        val waypointUri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3AAndroid%2Fdata%2Fdji.go.v5%2Ffiles%2Fwaypoint")
-        try {
-            pickFolderLauncher.launch(waypointUri)
-        } catch (e: Exception) {
+        val authority = "com.android.externalstorage.documents"
+        val candidatePaths = listOf(
+            "primary:Android/data/dji.go.v5/files/waypoint",
+            "primary:Android/data/dji.go.v5",
+            "primary:Android/data",
+            "primary:Android"
+        )
+
+        for (path in candidatePaths) {
             try {
-                val appUri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3AAndroid%2Fdata%2Fdji.go.v5")
-                pickFolderLauncher.launch(appUri)
-            } catch (_: Exception) {
-                pickFolderLauncher.launch(null)
-            }
+                val treeUri = DocumentsContract.buildTreeDocumentUri(authority, path)
+                pickFolderLauncher.launch(treeUri)
+                return
+            } catch (_: Exception) {}
+        }
+
+        try {
+            pickFolderLauncher.launch(null)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Tidak dapat membuka pemilih file sistem: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 

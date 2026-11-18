@@ -59,18 +59,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.1
-          name: DJI Waypoint Injector v1.0.1
+          tag_name: v1.0.2
+          name: DJI Waypoint Injector v1.0.2
           body: |
-            ### 📱 DJI Waypoint Injector v1.0.1 (Android Companion App)
-            Aplikasi Android ringan untuk menimpa misi dummy di aplikasi DJI Fly secara otomatis.
+            ### 📱 DJI Waypoint Injector v1.0.2 (Android Companion App)
+            Aplikasi Android untuk menimpa misi dummy di DJI Fly secara otomatis.
             
-            **Pembaruan v1.0.1:**
-            - 🚀 **Auto Deep-Link URI:** Langsung melompat ke folder `Android/data/dji.go.v5/files/waypoint` saat meminta izin SAF (mengatasi masalah folder `Android/data` yang tersembunyi di Android 11-14).
-            - 🕹️ **Mode Direct File:** Deteksi otomatis folder DJI Fly di remote control DJI RC 2 / DJI RC Pro tanpa perlu izin SAF.
-            - 📥 **Simpan KMZ:** Tombol baru untuk mengunduh KMZ langsung ke folder Downloads publik.
-            - 🔄 Sinkronisasi akun & misi tersimpan dari web `backend-iot.qbyte.web.id/maping`.
-            - ⚡ Tombol sekali klik: Timpa & Buka DJI Fly.
+            **Pembaruan v1.0.2:**
+            - 🔍 **Subfolder UUID Scanning:** Mendeteksi file KMZ dummy di dalam subfolder UUID DJI Fly (`waypoint/<UUID>/<UUID>.kmz`).
+            - 🚀 **Tree Document URI Deep-Link:** Menggunakan format SAF `DocumentsContract.buildTreeDocumentUri` standar.
+            - 🕹️ **Mode Direct File:** Deteksi langsung untuk DJI RC 2 / RC Pro.
+            - 📥 **Simpan KMZ:** Download langsung ke folder Downloads publik.
           files: android/app/build/outputs/apk/debug/dji-waypoint-injector.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
