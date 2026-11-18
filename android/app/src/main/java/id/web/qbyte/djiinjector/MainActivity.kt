@@ -5,8 +5,10 @@ import android.app.ProgressDialog
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.provider.DocumentsContract
+import android.os.Environment
+import android.provider.Settings
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,28 +26,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var missionAdapter: MissionAdapter
     private var token: String? = null
-    private var folderUri: Uri? = null
 
     private val prefs by lazy {
         getSharedPreferences("dji_injector_prefs", Context.MODE_PRIVATE)
     }
 
-    private val pickFolderLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri != null) {
-            try {
-                contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
-                folderUri = uri
-                prefs.edit().putString("folder_uri", uri.toString()).apply()
-                updateFolderStatusUI()
-                Toast.makeText(this, "Folder DJI Fly berhasil dihubungkan!", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this, "Gagal menyimpan izin folder: ${e.message}", Toast.LENGTH_LONG).show()
-            }
+    // Launcher to request MANAGE_EXTERNAL_STORAGE permission
+    private val manageStorageLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        // After returning from settings, re-check permission
+        updateFolderStatusUI()
+        if (hasFullStorageAccess()) {
+            Toast.makeText(this, "✅ Izin penyimpanan berhasil diberikan! Folder DJI Fly siap diakses.", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "⚠️ Izin penyimpanan belum diberikan. Tombol 'Simpan KMZ' ke Downloads masih bisa digunakan.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -56,6 +51,43 @@ class MainActivity : AppCompatActivity() {
 
         setupUI()
         checkLoginSession()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (token != null) {
+            updateFolderStatusUI()
+        }
+    }
+
+    /**
+     * Check if we have full storage access (MANAGE_EXTERNAL_STORAGE on Android 11+,
+     * or standard storage permission on older versions).
+     */
+    private fun hasFullStorageAccess(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            true // Android 10 and below: requestLegacyExternalStorage=true is enough
+        }
+    }
+
+    /**
+     * Check if the DJI Fly waypoint folder exists and is accessible.
+     */
+    private fun getDjiWaypointFolder(): File? {
+        if (!hasFullStorageAccess()) return null
+
+        val candidates = listOf(
+            File("/storage/emulated/0/Android/data/dji.go.v5/files/waypoint"),
+            File(Environment.getExternalStorageDirectory(), "Android/data/dji.go.v5/files/waypoint")
+        )
+        for (dir in candidates) {
+            if (dir.exists() && dir.isDirectory) {
+                return dir
+            }
+        }
+        return null
     }
 
     private fun setupUI() {
@@ -76,13 +108,17 @@ class MainActivity : AppCompatActivity() {
             loadMissions()
         }
 
-        // Folder Picker with Auto Deep-Link
+        // Folder Permission Button
         binding.btnPickFolder.setOnClickListener {
-            val directFolder = WaypointInjector.getDirectWaypointFolder()
-            if (directFolder != null) {
-                Toast.makeText(this, "Folder DJI Fly terdeteksi langsung tanpa perlu SAF!", Toast.LENGTH_SHORT).show()
+            if (hasFullStorageAccess()) {
+                val folder = getDjiWaypointFolder()
+                if (folder != null) {
+                    Toast.makeText(this, "✅ Folder DJI Fly sudah terhubung:\n${folder.absolutePath}", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this, "⚠️ Folder DJI Fly belum ditemukan. Pastikan DJI Fly sudah diinstal dan Anda sudah membuat 1 misi waypoint dummy.", Toast.LENGTH_LONG).show()
+                }
             } else {
-                showFolderPickerPrompt()
+                requestFullStorageAccess()
             }
         }
 
@@ -104,56 +140,45 @@ class MainActivity : AppCompatActivity() {
             token = null
             checkLoginSession()
         }
-
-        // Restore saved folder URI
-        val savedFolderStr = prefs.getString("folder_uri", null)
-        if (savedFolderStr != null) {
-            try {
-                folderUri = Uri.parse(savedFolderStr)
-            } catch (_: Exception) {}
-        }
-    }
-
-    private fun showFolderPickerPrompt() {
-        AlertDialog.Builder(this)
-            .setTitle("Buka Folder DJI Fly")
-            .setMessage("Aplikasi akan membuka folder waypoint DJI Fly secara langsung.\n\n" +
-                    "⚠️ Tips Android 11 - 14:\n" +
-                    "Jika sistem HP Anda mengarahkan ke folder luar (karena batasan Google):\n" +
-                    "1. Klik 'Gunakan Folder Ini' jika berada di folder dji.go.v5 / waypoint.\n" +
-                    "2. Atau gunakan tombol 'Simpan KMZ' untuk mengunduh lalu memindahkannya via ZArchiver / Kabel USB.")
-            .setPositiveButton("Buka Folder") { _, _ ->
-                launchFolderPickerWithDeepLink()
-            }
-            .setNegativeButton("Batal", null)
-            .show()
     }
 
     /**
-     * Auto Deep-Link using proper Tree Document URIs
+     * Request MANAGE_EXTERNAL_STORAGE permission via system settings.
+     * This is the same approach used by ZArchiver, Solid Explorer, etc.
      */
-    private fun launchFolderPickerWithDeepLink() {
-        val authority = "com.android.externalstorage.documents"
-        val candidatePaths = listOf(
-            "primary:Android/data/dji.go.v5/files/waypoint",
-            "primary:Android/data/dji.go.v5",
-            "primary:Android/data",
-            "primary:Android"
-        )
-
-        for (path in candidatePaths) {
-            try {
-                val treeUri = DocumentsContract.buildTreeDocumentUri(authority, path)
-                pickFolderLauncher.launch(treeUri)
-                return
-            } catch (_: Exception) {}
-        }
-
-        try {
-            pickFolderLauncher.launch(null)
-        } catch (e: Exception) {
-            Toast.makeText(this, "Tidak dapat membuka pemilih file sistem: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
+    private fun requestFullStorageAccess() {
+        AlertDialog.Builder(this)
+            .setTitle("Izin Akses Penyimpanan Penuh")
+            .setMessage(
+                "Untuk menimpa file waypoint DJI Fly di folder:\n" +
+                "Android/data/dji.go.v5/files/waypoint/\n\n" +
+                "Aplikasi membutuhkan izin 'Akses Semua File'.\n\n" +
+                "Langkah selanjutnya:\n" +
+                "1. Layar pengaturan akan terbuka\n" +
+                "2. Aktifkan toggle 'Izinkan akses untuk mengelola semua file'\n" +
+                "3. Kembali ke aplikasi ini\n\n" +
+                "⚡ Setelah diizinkan, semua misi bisa langsung ditimpa otomatis tanpa perlu memilih folder!")
+            .setPositiveButton("Buka Pengaturan") { _, _ ->
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                            data = Uri.parse("package:$packageName")
+                        }
+                        manageStorageLauncher.launch(intent)
+                    }
+                } catch (e: Exception) {
+                    try {
+                        val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                        manageStorageLauncher.launch(intent)
+                    } catch (_: Exception) {
+                        Toast.makeText(this, "Tidak dapat membuka pengaturan: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("Nanti Saja") { _, _ ->
+                Toast.makeText(this, "Anda tetap bisa menggunakan tombol 'Simpan KMZ' untuk menyimpan ke Downloads.", Toast.LENGTH_LONG).show()
+            }
+            .show()
     }
 
     private fun checkLoginSession() {
@@ -174,25 +199,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateFolderStatusUI() {
-        val directFolder = WaypointInjector.getDirectWaypointFolder()
-        if (directFolder != null) {
-            binding.tvFolderStatus.text = "Terdeteksi Langsung (DJI RC / Direct)"
-            binding.tvFolderStatus.setBackgroundColor(0xFFD1FAE5.toInt()) // Light Green
-            binding.tvFolderStatus.setTextColor(0xFF065F46.toInt()) // Dark Green
-            binding.btnPickFolder.text = "Folder DJI Fly Otomatis Aktif"
+        if (!hasFullStorageAccess()) {
+            binding.tvFolderStatus.text = "Izin Belum Diberikan"
+            binding.tvFolderStatus.setBackgroundColor(0xFFFEE2E2.toInt()) // Light Red
+            binding.tvFolderStatus.setTextColor(0xFFB91C1C.toInt()) // Dark Red
+            binding.btnPickFolder.text = "🔓 Berikan Izin Akses Penyimpanan"
             return
         }
 
-        if (folderUri != null) {
-            binding.tvFolderStatus.text = "Terhubung (SAF)"
+        val folder = getDjiWaypointFolder()
+        if (folder != null) {
+            binding.tvFolderStatus.text = "✅ Terhubung Langsung"
             binding.tvFolderStatus.setBackgroundColor(0xFFD1FAE5.toInt()) // Light Green
             binding.tvFolderStatus.setTextColor(0xFF065F46.toInt()) // Dark Green
-            binding.btnPickFolder.text = "Ubah Izin Folder DJI Fly"
+            binding.btnPickFolder.text = "Folder DJI Fly Siap (Akses Langsung)"
         } else {
-            binding.tvFolderStatus.text = "Belum Terhubung"
+            binding.tvFolderStatus.text = "Izin OK — DJI Fly Belum Ditemukan"
             binding.tvFolderStatus.setBackgroundColor(0xFFFEF3C7.toInt()) // Light Amber
             binding.tvFolderStatus.setTextColor(0xFFB45309.toInt()) // Dark Amber
-            binding.btnPickFolder.text = "Buka Folder DJI Fly (Auto Deep-Link)"
+            binding.btnPickFolder.text = "Buat Misi Dummy di DJI Fly Dulu"
         }
     }
 
@@ -257,17 +282,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun confirmAndInjectMission(mission: MissionItem) {
-        val directFolder = WaypointInjector.getDirectWaypointFolder()
-        val currentUri = folderUri
-
-        if (directFolder == null && currentUri == null) {
+        if (!hasFullStorageAccess()) {
             AlertDialog.Builder(this)
-                .setTitle("Folder DJI Fly Belum Diizinkan")
-                .setMessage("Aplikasi akan langsung membuka folder waypoint DJI Fly (Auto Deep-Link).\n\nSaat folder terbuka, cukup klik tombol 'GUNAKAN FOLDER INI' di bagian bawah layar.")
-                .setPositiveButton("Buka Folder Sekarang") { _, _ ->
-                    launchFolderPickerWithDeepLink()
+                .setTitle("Izin Penyimpanan Diperlukan")
+                .setMessage("Untuk menimpa file DJI Fly, aplikasi membutuhkan izin akses penyimpanan penuh terlebih dahulu.")
+                .setPositiveButton("Berikan Izin") { _, _ ->
+                    requestFullStorageAccess()
                 }
                 .setNegativeButton("Batal", null)
+                .show()
+            return
+        }
+
+        val folder = getDjiWaypointFolder()
+        if (folder == null) {
+            AlertDialog.Builder(this)
+                .setTitle("Folder DJI Fly Belum Ada")
+                .setMessage(
+                    "Folder waypoint DJI Fly belum ditemukan di:\n" +
+                    "Android/data/dji.go.v5/files/waypoint/\n\n" +
+                    "Pastikan:\n" +
+                    "1. Aplikasi DJI Fly sudah diinstal\n" +
+                    "2. Buat 1 misi waypoint dummy di DJI Fly terlebih dahulu\n\n" +
+                    "Misi dummy akan membuat folder otomatis.")
+                .setPositiveButton("Buka DJI Fly") { _, _ ->
+                    if (!WaypointInjector.launchDJIFly(this)) {
+                        Toast.makeText(this, "DJI Fly tidak ditemukan", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("Tutup", null)
                 .show()
             return
         }
@@ -276,13 +319,13 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Timpa Misi DJI Fly")
             .setMessage("Apakah Anda ingin menimpa file dummy terbaru di DJI Fly dengan misi '${mission.title}'?")
             .setPositiveButton("Ya, Timpa Sekarang") { _, _ ->
-                executeInject(mission, directFolder, currentUri)
+                executeInject(mission, folder)
             }
             .setNegativeButton("Batal", null)
             .show()
     }
 
-    private fun executeInject(mission: MissionItem, directFolder: File?, uri: Uri?) {
+    private fun executeInject(mission: MissionItem, waypointFolder: File) {
         val currentToken = token ?: return
         val progress = ProgressDialog(this).apply {
             setMessage("Sedang mengunduh dan menimpa misi ke DJI Fly...")
@@ -293,13 +336,7 @@ class MainActivity : AppCompatActivity() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val kmzBytes = ApiService.downloadMissionKmz(mission.id, currentToken)
-                val result = if (directFolder != null) {
-                    WaypointInjector.injectMissionDirect(directFolder, kmzBytes)
-                } else if (uri != null) {
-                    WaypointInjector.injectMission(this@MainActivity, uri, kmzBytes)
-                } else {
-                    WaypointInjector.InjectResult(false, null, "Folder DJI Fly belum diatur.")
-                }
+                val result = WaypointInjector.injectMissionDirect(waypointFolder, kmzBytes)
 
                 withContext(Dispatchers.Main) {
                     progress.dismiss()
@@ -307,7 +344,7 @@ class MainActivity : AppCompatActivity() {
                     if (result.success) {
                         AlertDialog.Builder(this@MainActivity)
                             .setTitle("Berhasil Ditimpa! 🚀")
-                            .setMessage("Misi '${mission.title}' berhasil disuntikkan ke file dummy '${result.dummyFileName}'. Buka DJI Fly sekarang untuk mulai terbang.")
+                            .setMessage("Misi '${mission.title}' berhasil disuntikkan ke file dummy '${result.dummyFileName}'.\n\nBuka DJI Fly sekarang untuk mulai terbang.")
                             .setPositiveButton("Buka DJI Fly") { _, _ ->
                                 WaypointInjector.launchDJIFly(this@MainActivity)
                             }
