@@ -73,21 +73,117 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * All known DJI app package names
+     */
+    private val DJI_PACKAGES = listOf(
+        "dji.go.v5",
+        "com.dji.industry.pilot",
+        "dji.pilot2",
+        "com.dji.go.v5"
+    )
+
+    /**
      * Check if the DJI Fly waypoint folder exists and is accessible.
+     * Also creates 'waypoint' subfolder if dji app folder exists but waypoint doesn't.
      */
     private fun getDjiWaypointFolder(): File? {
         if (!hasFullStorageAccess()) return null
 
-        val candidates = listOf(
-            File("/storage/emulated/0/Android/data/dji.go.v5/files/waypoint"),
-            File(Environment.getExternalStorageDirectory(), "Android/data/dji.go.v5/files/waypoint")
-        )
-        for (dir in candidates) {
-            if (dir.exists() && dir.isDirectory) {
-                return dir
+        val storage = Environment.getExternalStorageDirectory()
+
+        for (pkg in DJI_PACKAGES) {
+            val waypointDir = File(storage, "Android/data/$pkg/files/waypoint")
+            if (waypointDir.exists() && waypointDir.isDirectory) {
+                return waypointDir
+            }
+
+            // Check if the app folder exists but waypoint subfolder doesn't yet
+            val filesDir = File(storage, "Android/data/$pkg/files")
+            if (filesDir.exists() && filesDir.isDirectory) {
+                // Create waypoint folder automatically
+                if (waypointDir.mkdirs() || waypointDir.exists()) {
+                    return waypointDir
+                }
             }
         }
         return null
+    }
+
+    /**
+     * Diagnose the DJI folder structure for debugging
+     */
+    private fun diagnoseDjiFolder(): String {
+        val storage = Environment.getExternalStorageDirectory()
+        val sb = StringBuilder()
+        sb.appendLine("📋 Diagnosis Folder DJI:")
+        sb.appendLine("Storage: ${storage.absolutePath}")
+        sb.appendLine("")
+
+        var foundAny = false
+        for (pkg in DJI_PACKAGES) {
+            val dataDir = File(storage, "Android/data/$pkg")
+            if (dataDir.exists()) {
+                foundAny = true
+                sb.appendLine("✅ $pkg ditemukan!")
+                val filesDir = File(dataDir, "files")
+                if (filesDir.exists()) {
+                    sb.appendLine("   ✅ files/ ada")
+                    val waypointDir = File(filesDir, "waypoint")
+                    if (waypointDir.exists()) {
+                        sb.appendLine("   ✅ files/waypoint/ ada")
+                        val contents = waypointDir.listFiles()
+                        sb.appendLine("   📂 Isi: ${contents?.size ?: 0} item")
+                        contents?.take(5)?.forEach { f ->
+                            if (f.isDirectory) {
+                                val subFiles = f.listFiles()
+                                sb.appendLine("   📁 ${f.name}/ (${subFiles?.size ?: 0} file)")
+                                subFiles?.take(3)?.forEach { sf ->
+                                    sb.appendLine("      📄 ${sf.name} (${sf.length()} bytes)")
+                                }
+                            } else {
+                                sb.appendLine("   📄 ${f.name} (${f.length()} bytes)")
+                            }
+                        }
+                    } else {
+                        sb.appendLine("   ❌ files/waypoint/ BELUM ADA")
+                        sb.appendLine("   → Buat 1 misi waypoint dummy di DJI Fly dulu")
+                        // List what IS in files/
+                        val filesContents = filesDir.listFiles()
+                        sb.appendLine("   📂 Isi files/: ${filesContents?.map { it.name }?.joinToString(", ") ?: "kosong"}")
+                    }
+                } else {
+                    sb.appendLine("   ❌ files/ tidak ada")
+                }
+            }
+        }
+
+        if (!foundAny) {
+            sb.appendLine("❌ Tidak ada folder DJI ditemukan di Android/data/")
+            sb.appendLine("")
+            sb.appendLine("Kemungkinan penyebab:")
+            sb.appendLine("1. DJI Fly belum diinstal")
+            sb.appendLine("2. DJI Fly belum pernah dibuka")
+            sb.appendLine("3. Nama paket DJI berbeda")
+            sb.appendLine("")
+
+            // List what IS in Android/data for debugging
+            val androidData = File(storage, "Android/data")
+            if (androidData.exists()) {
+                val djiRelated = androidData.listFiles()?.filter {
+                    it.name.lowercase().contains("dji")
+                }
+                if (!djiRelated.isNullOrEmpty()) {
+                    sb.appendLine("🔍 Folder DJI yang ditemukan:")
+                    djiRelated.forEach { sb.appendLine("   📁 ${it.name}") }
+                } else {
+                    sb.appendLine("🔍 Tidak ada folder dengan kata 'dji' di Android/data/")
+                }
+            } else {
+                sb.appendLine("⚠️ Folder Android/data/ tidak dapat diakses")
+            }
+        }
+
+        return sb.toString()
     }
 
     private fun setupUI() {
@@ -113,9 +209,23 @@ class MainActivity : AppCompatActivity() {
             if (hasFullStorageAccess()) {
                 val folder = getDjiWaypointFolder()
                 if (folder != null) {
-                    Toast.makeText(this, "✅ Folder DJI Fly sudah terhubung:\n${folder.absolutePath}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "✅ Folder DJI Fly terhubung:\n${folder.absolutePath}", Toast.LENGTH_LONG).show()
                 } else {
-                    Toast.makeText(this, "⚠️ Folder DJI Fly belum ditemukan. Pastikan DJI Fly sudah diinstal dan Anda sudah membuat 1 misi waypoint dummy.", Toast.LENGTH_LONG).show()
+                    // Show detailed diagnosis
+                    val diagnosis = diagnoseDjiFolder()
+                    AlertDialog.Builder(this)
+                        .setTitle("Folder DJI Fly Tidak Ditemukan")
+                        .setMessage(diagnosis)
+                        .setPositiveButton("Buka DJI Fly") { _, _ ->
+                            if (!WaypointInjector.launchDJIFly(this)) {
+                                Toast.makeText(this, "DJI Fly belum diinstal", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        .setNeutralButton("Cek Ulang") { _, _ ->
+                            updateFolderStatusUI()
+                        }
+                        .setNegativeButton("Tutup", null)
+                        .show()
                 }
             } else {
                 requestFullStorageAccess()
@@ -209,15 +319,15 @@ class MainActivity : AppCompatActivity() {
 
         val folder = getDjiWaypointFolder()
         if (folder != null) {
-            binding.tvFolderStatus.text = "✅ Terhubung Langsung"
+            binding.tvFolderStatus.text = "✅ Terhubung: ${folder.absolutePath}"
             binding.tvFolderStatus.setBackgroundColor(0xFFD1FAE5.toInt()) // Light Green
             binding.tvFolderStatus.setTextColor(0xFF065F46.toInt()) // Dark Green
-            binding.btnPickFolder.text = "Folder DJI Fly Siap (Akses Langsung)"
+            binding.btnPickFolder.text = "📂 Lihat Detail Folder DJI Fly"
         } else {
-            binding.tvFolderStatus.text = "Izin OK — DJI Fly Belum Ditemukan"
+            binding.tvFolderStatus.text = "⚠️ Izin OK — Folder DJI Fly Belum Ditemukan"
             binding.tvFolderStatus.setBackgroundColor(0xFFFEF3C7.toInt()) // Light Amber
             binding.tvFolderStatus.setTextColor(0xFFB45309.toInt()) // Dark Amber
-            binding.btnPickFolder.text = "Buat Misi Dummy di DJI Fly Dulu"
+            binding.btnPickFolder.text = "🔍 Diagnosis Folder DJI Fly"
         }
     }
 
@@ -296,15 +406,10 @@ class MainActivity : AppCompatActivity() {
 
         val folder = getDjiWaypointFolder()
         if (folder == null) {
+            val diagnosis = diagnoseDjiFolder()
             AlertDialog.Builder(this)
                 .setTitle("Folder DJI Fly Belum Ada")
-                .setMessage(
-                    "Folder waypoint DJI Fly belum ditemukan di:\n" +
-                    "Android/data/dji.go.v5/files/waypoint/\n\n" +
-                    "Pastikan:\n" +
-                    "1. Aplikasi DJI Fly sudah diinstal\n" +
-                    "2. Buat 1 misi waypoint dummy di DJI Fly terlebih dahulu\n\n" +
-                    "Misi dummy akan membuat folder otomatis.")
+                .setMessage(diagnosis)
                 .setPositiveButton("Buka DJI Fly") { _, _ ->
                     if (!WaypointInjector.launchDJIFly(this)) {
                         Toast.makeText(this, "DJI Fly tidak ditemukan", Toast.LENGTH_SHORT).show()
