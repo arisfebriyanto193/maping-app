@@ -38,7 +38,9 @@ object WaypointInjector {
     }
 
     /**
-     * Injects KMZ directly via standard java.io.File
+     * Injects KMZ directly via standard java.io.File.
+     * If no dummy KMZ exists yet, creates a new one with a UUID-based folder structure
+     * matching DJI Fly's expected format: waypoint/<UUID>/<UUID>.kmz
      */
     fun injectMissionDirect(targetDir: File, kmzBytes: ByteArray): InjectResult {
         try {
@@ -56,10 +58,24 @@ object WaypointInjector {
             val kmzFiles = directKmz + subfolderKmz
 
             if (kmzFiles.isEmpty()) {
+                // No dummy exists yet — create a new UUID-based folder structure
+                // This mimics what DJI Fly does: waypoint/<UUID>/<UUID>.kmz
+                val uuid = java.util.UUID.randomUUID().toString()
+                val missionFolder = File(targetDir, uuid)
+                if (!missionFolder.mkdirs() && !missionFolder.exists()) {
+                    return InjectResult(false, null, "Gagal membuat folder misi: ${missionFolder.absolutePath}")
+                }
+
+                val newKmzFile = File(missionFolder, "$uuid.kmz")
+                FileOutputStream(newKmzFile).use { fos ->
+                    fos.write(kmzBytes)
+                    fos.flush()
+                }
+
                 return InjectResult(
-                    false,
-                    null,
-                    "Tidak ditemukan file .kmz di folder waypoint DJI Fly. Pastikan Anda sudah membuat misi dummy di DJI Fly terlebih dahulu."
+                    true,
+                    newKmzFile.name,
+                    "Berhasil membuat misi baru: ${newKmzFile.name} (tanpa perlu dummy)"
                 )
             }
 
