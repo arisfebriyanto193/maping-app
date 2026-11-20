@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { X, FolderOpen, Trash2, Calendar, Plane, MapPin, AlertCircle, RefreshCw } from 'lucide-react';
+import { X, FolderOpen, Trash2, Calendar, Plane, MapPin, AlertCircle, RefreshCw, Share2, Check, ExternalLink } from 'lucide-react';
 import { DroneMissionRecord, UserSession } from '@/types/drone';
 
 interface MissionsDrawerProps {
@@ -22,6 +22,16 @@ export default function MissionsDrawer({
   const [missions, setMissions] = useState<DroneMissionRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
+
+  const handleCopyShareLink = (token?: string | null) => {
+    if (!token) return;
+    const shareUrl = `${window.location.origin}/maping/share/${token}`;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopiedToken(token);
+      setTimeout(() => setCopiedToken(null), 2500);
+    });
+  };
 
   const fetchMissions = async () => {
     if (!user) return;
@@ -140,9 +150,16 @@ export default function MissionsDrawer({
                     <h4 className="font-extrabold text-slate-900 text-xs group-hover:text-sky-700">
                       {m.title}
                     </h4>
-                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-sky-100 text-sky-700">
-                      {m.mission_type}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      {m.geotiff_url && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                          🗺️ GeoTIFF
+                        </span>
+                      )}
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-sky-100 text-sky-700">
+                        {m.mission_type}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600 mb-3 font-medium">
@@ -161,22 +178,56 @@ export default function MissionsDrawer({
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-                    <button
-                      onClick={() => {
-                        onLoadMission(m);
-                        onClose();
-                      }}
-                      className="bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition cursor-pointer shadow-2xs"
-                    >
-                      Buka Misi
-                    </button>
-                    <button
-                      onClick={() => handleDelete(m.id)}
-                      className="text-slate-400 hover:text-red-600 p-1 rounded transition cursor-pointer"
-                      title="Hapus"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => {
+                          onLoadMission(m);
+                          onClose();
+                        }}
+                        className="bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer shadow-2xs"
+                      >
+                        Buka Misi
+                      </button>
+                      {m.share_token && (
+                        <button
+                          onClick={() => handleCopyShareLink(m.share_token)}
+                          className="flex items-center gap-1 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-2 py-1.5 rounded-xl transition cursor-pointer"
+                          title="Salin tautan publik untuk dibagikan"
+                        >
+                          {copiedToken === m.share_token ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span className="text-emerald-700 text-[11px]">Tersalin!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Share2 className="w-3 h-3 text-sky-600" />
+                              <span className="text-[11px]">Share</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {m.share_token && (
+                        <a
+                          href={`/maping/share/${m.share_token}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 text-slate-400 hover:text-sky-600 rounded-lg transition"
+                          title="Buka Halaman Share di Tab Baru"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      <button
+                        onClick={() => handleDelete(m.id)}
+                        className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg transition cursor-pointer"
+                        title="Hapus"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

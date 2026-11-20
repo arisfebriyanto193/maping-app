@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Save, Database, Download, AlertCircle, Check, RefreshCw, PlusCircle } from 'lucide-react';
-import { UserSession, DroneMissionRecord, Waypoint, MissionSettings, MissionStats } from '@/types/drone';
+import { X, Save, Database, Download, AlertCircle, Check, RefreshCw, PlusCircle, Share2, Layers } from 'lucide-react';
+import { UserSession, DroneMissionRecord, Waypoint, MissionSettings, MissionStats, GeoTiffData } from '@/types/drone';
 
 interface SaveMissionModalProps {
   isOpen: boolean;
@@ -16,6 +16,7 @@ interface SaveMissionModalProps {
   editingMission?: DroneMissionRecord | null;
   onResetEditingMission?: () => void;
   onSavedSuccess?: () => void;
+  geotiffData?: GeoTiffData | null;
 }
 
 export default function SaveMissionModal({
@@ -30,6 +31,7 @@ export default function SaveMissionModal({
   editingMission,
   onResetEditingMission,
   onSavedSuccess,
+  geotiffData,
 }: SaveMissionModalProps) {
   const [title, setTitle] = useState(settings.title || 'Misi Pemetaan Drone');
   const [description, setDescription] = useState('');
@@ -84,6 +86,9 @@ export default function SaveMissionModal({
         boundary_geojson: boundaryCoords.length >= 3 ? boundaryCoords : undefined,
         waypoints_json: waypoints,
         stats_json: stats,
+        geotiff_url: geotiffData?.url || (editingMission?.geotiff_url ?? null),
+        geotiff_filename: geotiffData?.filename || (editingMission?.geotiff_filename ?? null),
+        geotiff_metadata: geotiffData || (editingMission?.geotiff_metadata ?? null),
       };
 
       const isUpdate = mode === 'update' && editingMission?.id;
@@ -188,6 +193,34 @@ export default function SaveMissionModal({
           </div>
         )}
 
+        {/* Public Share Token Banner */}
+        {editingMission?.share_token && (
+          <div className="bg-sky-50 border border-sky-200 rounded-2xl p-2.5 mb-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0 pr-2">
+              <Share2 className="w-4 h-4 text-sky-600 shrink-0" />
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold uppercase text-sky-800 block">
+                  Tautan Share Publik:
+                </span>
+                <span className="text-xs font-semibold text-sky-900 truncate block">
+                  /share/{editingMission.share_token}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const url = `${window.location.origin}/maping/share/${editingMission.share_token}`;
+                navigator.clipboard.writeText(url);
+                alert('Tautan publik berhasil disalin ke clipboard!');
+              }}
+              className="text-[10px] font-bold text-sky-700 hover:bg-sky-100 bg-white border border-sky-300 px-2.5 py-1 rounded-lg shrink-0 transition shadow-2xs cursor-pointer"
+            >
+              Salin Link
+            </button>
+          </div>
+        )}
+
         {successMsg && (
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs p-3 rounded-2xl mb-4 flex items-center gap-2 font-medium">
             <Check className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -245,6 +278,16 @@ export default function SaveMissionModal({
               <span className="text-slate-500">Jumlah Waypoint:</span>
               <span className="font-extrabold text-emerald-700">{waypoints.length} titik</span>
             </div>
+            {(geotiffData || editingMission?.geotiff_url) && (
+              <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/80 text-amber-800">
+                <span className="flex items-center gap-1 font-semibold text-[11px]">
+                  🗺️ Peta GeoTIFF:
+                </span>
+                <span className="font-bold text-[11px] truncate max-w-[200px]">
+                  {geotiffData?.filename || editingMission?.geotiff_filename || 'Aktif'}
+                </span>
+              </div>
+            )}
           </div>
 
           {user ? (

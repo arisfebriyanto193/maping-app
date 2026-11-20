@@ -24,6 +24,7 @@ import {
   UserSession,
   DroneMissionRecord,
   HistoryState,
+  GeoTiffData,
 } from '@/types/drone';
 
 // Dynamically import Leaflet Map component with SSR disabled
@@ -87,6 +88,9 @@ export default function DroneMappingApp() {
     batteriesRequired: 0,
     batteryRemainingPercent: 100,
   });
+
+  // GeoTIFF Map Overlay State
+  const [geotiffData, setGeotiffData] = useState<GeoTiffData | null>(null);
 
   // ==========================================
   // UNDO & REDO HISTORY STACK SYSTEM
@@ -159,6 +163,7 @@ export default function DroneMappingApp() {
     setOrbitCenter(undefined);
     pushHistory([], undefined);
     setWaypoints([]);
+    setGeotiffData(null);
     setStats({
       areaM2: 0,
       areaHectares: 0,
@@ -355,6 +360,16 @@ export default function DroneMappingApp() {
             : mission.stats_json;
         setStats(st);
       }
+
+      if (mission.geotiff_url) {
+        setGeotiffData({
+          url: mission.geotiff_url,
+          filename: mission.geotiff_filename || 'geotiff.tif',
+          opacity: 0.85,
+        });
+      } else {
+        setGeotiffData(null);
+      }
     } catch (err) {
       console.error('Error loading mission:', err);
       alert('Gagal memuat data misi');
@@ -457,6 +472,9 @@ export default function DroneMappingApp() {
             canRedo={canRedo}
             onUndo={handleUndo}
             onRedo={handleRedo}
+            geotiffData={geotiffData}
+            onGeoTiffLoaded={(data) => setGeotiffData(data)}
+            onRemoveGeoTiff={() => setGeotiffData(null)}
           />
         </main>
       </div>
@@ -489,6 +507,7 @@ export default function DroneMappingApp() {
         stats={stats}
         editingMission={editingMission}
         onResetEditingMission={() => setEditingMission(null)}
+        geotiffData={geotiffData}
       />
 
       <ExportModal

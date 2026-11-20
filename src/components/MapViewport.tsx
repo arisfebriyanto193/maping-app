@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Waypoint, MissionType } from '@/types/drone';
-import { Layers, ZoomIn, ZoomOut, Search, Crosshair, Navigation, Undo2, Redo2, Trash2, X, FileUp } from 'lucide-react';
+import { Waypoint, MissionType, GeoTiffData } from '@/types/drone';
+import { Layers, ZoomIn, ZoomOut, Search, Crosshair, Navigation, Undo2, Redo2, Trash2, X, FileUp, Eye, EyeOff } from 'lucide-react';
 import { parseKmlOrKmz } from '@/lib/kml-parser';
+import { loadGeoTiffOnMap } from '@/lib/geotiff-loader';
 
 interface MapViewportProps {
   missionType: MissionType;
@@ -20,6 +21,9 @@ interface MapViewportProps {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  geotiffData?: GeoTiffData | null;
+  onGeoTiffLoaded?: (data: GeoTiffData) => void;
+  onRemoveGeoTiff?: () => void;
 }
 
 export default function MapViewport({
@@ -37,6 +41,9 @@ export default function MapViewport({
   canRedo,
   onUndo,
   onRedo,
+  geotiffData,
+  onGeoTiffLoaded,
+  onRemoveGeoTiff,
 }: MapViewportProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -49,6 +56,7 @@ export default function MapViewport({
   const flightPathLayerRef = useRef<any>(null);
   const markersLayerRef = useRef<any>(null);
   const userLocationLayerRef = useRef<any>(null);
+  const geotiffLayerRef = useRef<any>(null);
 
   const [activeLayerName, setActiveLayerName] = useState('googleHybrid');
   const [showLayerMenu, setShowLayerMenu] = useState(false);
@@ -57,6 +65,116 @@ export default function MapViewport({
   const [locating, setLocating] = useState(false);
   const [uploadingKml, setUploadingKml] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // GeoTIFF state & refs
+  const tifFileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingTif, setUploadingTif] = useState(false);
+  const [geotiffOpacity, setGeotiffOpacity] = useState(0.85);
+  const [showGeotiffLayer, setShowGeotiffLayer] = useState(true);
+
+  const handleTifImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingTif(true);
+      const map = mapInstanceRef.current;
+      if (!map) throw new Error('Peta belum siap');
+
+      if (geotiffLayerRef.current) {
+        map.removeLayer(geotiffLayerRef.current);
+        geotiffLayerRef.current = null;
+      }
+
+      // Render directly on map
+      const result = await loadGeoTiffOnMap(map, file, { opacity: geotiffOpacity, fitBounds: true });
+      geotiffLayerRef.current = result.layer;
+
+      // Upload to server so project can be saved and shared with link
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/maping/api/upload/geotiff', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        if (onGeoTiffLoaded) {
+          onGeoTiffLoaded({
+            url: resData.data.url,
+            filename: file.name,
+            size: file.size,
+            opacity: geotiffOpacity,
+          });
+        }
+        alert(`Berhasil memuat dan mengupload GeoTIFF: ${file.name}`);
+      } else {
+        if (onGeoTiffLoaded) {
+          onGeoTiffLoaded({
+            url: '',
+            filename: file.name,
+            size: file.size,
+            opacity: geotiffOpacity,
+          });
+        }
+        alert(`Peta GeoTIFF ditampilkan di layar.`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('Gagal memproses file GeoTIFF: ' + err.message);
+    } finally {
+      setUploadingTif(false);
+      if (tifFileInputRef.current) tifFileInputRef.current.value = '';
+    }
+  };
+
+  // Load saved GeoTIFF when geotiffData.url is provided (e.g. opened project)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    if (!geotiffData?.url) {
+      if (geotiffLayerRef.current) {
+        map.removeLayer(geotiffLayerRef.current);
+        geotiffLayerRef.current = null;
+      }
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadSavedTif() {
+      try {
+        if (geotiffLayerRef.current) {
+          map.removeLayer(geotiffLayerRef.current);
+          geotiffLayerRef.current = null;
+        }
+        const result = await loadGeoTiffOnMap(map, geotiffData!.url, {
+          opacity: geotiffOpacity,
+          fitBounds: boundaryCoords.length === 0 && waypoints.length === 0,
+        });
+        if (!isCancelled) {
+          geotiffLayerRef.current = result.layer;
+        }
+      } catch (err) {
+        console.error('Failed to load saved GeoTIFF:', err);
+      }
+    }
+
+    loadSavedTif();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [geotiffData?.url]);
+
+  // Update GeoTIFF opacity & visibility
+  useEffect(() => {
+    if (geotiffLayerRef.current && typeof geotiffLayerRef.current.setOpacity === 'function') {
+      geotiffLayerRef.current.setOpacity(showGeotiffLayer ? geotiffOpacity : 0);
+    }
+  }, [geotiffOpacity, showGeotiffLayer]);
 
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -574,7 +692,82 @@ export default function MapViewport({
           <FileUp className="w-3.5 h-3.5 text-emerald-600" />
           <span>{uploadingKml ? 'Memuat...' : 'Import KML/KMZ'}</span>
         </button>
+
+        <div className="h-4 w-px bg-slate-200 mx-0.5" />
+
+        {/* GeoTIFF Map (.tif) Upload */}
+        <input
+          type="file"
+          ref={tifFileInputRef}
+          onChange={handleTifImport}
+          accept=".tif,.tiff"
+          className="hidden"
+        />
+
+        <button
+          onClick={() => tifFileInputRef.current?.click()}
+          disabled={uploadingTif}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer bg-sky-50 text-sky-700 hover:bg-sky-100 shadow-2xs border border-sky-200/60"
+          title="Upload Peta Ortofoto GeoTIFF (.tif / .tiff)"
+        >
+          <Layers className="w-3.5 h-3.5 text-sky-600" />
+          <span>{uploadingTif ? 'Memproses TIF...' : 'Peta GeoTIFF (.tif)'}</span>
+        </button>
       </div>
+
+      {/* Floating GeoTIFF Active Control Card */}
+      {geotiffData && (
+        <div className="absolute top-26 left-3 z-20 bg-white/95 backdrop-blur-md border border-slate-200 shadow-lg rounded-2xl p-2.5 text-xs text-slate-800 space-y-2 max-w-xs animate-in fade-in">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
+            <div className="flex items-center gap-1.5 min-w-0 font-bold text-slate-900 text-[11px]">
+              <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse shrink-0" />
+              <span className="truncate">{geotiffData.filename}</span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowGeotiffLayer(!showGeotiffLayer)}
+                className="text-slate-400 hover:text-slate-700 p-0.5 rounded transition cursor-pointer"
+                title={showGeotiffLayer ? 'Sembunyikan GeoTIFF' : 'Tampilkan GeoTIFF'}
+              >
+                {showGeotiffLayer ? <Eye className="w-3.5 h-3.5 text-emerald-600" /> : <EyeOff className="w-3.5 h-3.5 text-slate-400" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (geotiffLayerRef.current && mapInstanceRef.current) {
+                    mapInstanceRef.current.removeLayer(geotiffLayerRef.current);
+                    geotiffLayerRef.current = null;
+                  }
+                  if (onRemoveGeoTiff) onRemoveGeoTiff();
+                }}
+                className="text-slate-400 hover:text-red-600 p-0.5 rounded transition cursor-pointer"
+                title="Hapus Layer GeoTIFF"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {showGeotiffLayer && (
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] text-slate-500 font-medium">
+                <span>Transparansi:</span>
+                <span className="font-bold text-slate-800">{Math.round(geotiffOpacity * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.05"
+                value={geotiffOpacity}
+                onChange={(e) => setGeotiffOpacity(parseFloat(e.target.value))}
+                className="w-full accent-sky-600 cursor-pointer h-1.5 bg-slate-200 rounded appearance-none"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Floating Map Controls (Right Side) */}
       <div className="absolute top-3 right-3 z-20 flex flex-col gap-2">

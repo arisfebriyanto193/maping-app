@@ -74,6 +74,14 @@ export interface MissionStats {
   batteryRemainingPercent: number;
 }
 
+export interface GeoTiffData {
+  url: string;
+  filename: string;
+  size?: number;
+  bounds?: [[number, number], [number, number]]; // [[south, west], [north, east]]
+  opacity?: number;
+}
+
 export interface DroneMissionRecord {
   id?: number;
   user_id?: number;
@@ -90,6 +98,11 @@ export interface DroneMissionRecord {
   boundary_geojson?: any;
   waypoints_json: Waypoint[];
   stats_json?: MissionStats;
+  geotiff_url?: string | null;
+  geotiff_filename?: string | null;
+  geotiff_metadata?: any;
+  share_token?: string | null;
+  is_public?: boolean | number;
   created_at?: string;
   updated_at?: string;
 }
